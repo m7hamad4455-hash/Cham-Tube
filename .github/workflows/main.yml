@@ -22,16 +22,12 @@ jobs:
 
     - name: Unzip Project Source Direct
       run: |
-        # فك الضغط المباشر في المجلد الرئيسي المستقر والنظيف
         unzip -o app.zip -d .
         echo "Project unzipped successfully."
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
-        # 1. إصلاح سطر ADRTLogCatReader المسبب للمشاكل
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
-        
-        # 2. ضبط حجم البانر تلقائياً لملء الشاشة من العرض
         find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
 
     - name: Inject Banner ID and 30s Auto-Refresh Timer
@@ -68,7 +64,6 @@ jobs:
         
         if [ -n "$REWARDED_FILE" ]; then
           echo "Found RewardedAdManager at: $REWARDED_FILE"
-          # إصلاح معرف إعلان المكافأة بحذف الشرطة الأولى لتطابق تنسيق ياندكس الرسمي المعتمد في اللوحة
           sed -i 's/"R-M-19537340-1"/"RM-19537340-1"/g' "$REWARDED_FILE"
           echo "Rewarded Ad ID patched successfully."
         else
@@ -78,21 +73,25 @@ jobs:
 
     - name: Grant Execute Permission to Gradle
       run: |
-        # منح صلاحية التنفيذ لملف gradlew أينما كان مساره بعد فك الضغط
         find . -name "gradlew" -exec chmod +x {} \;
 
     - name: Build Release APK
       run: |
-        # تحديد مجلد البناء وتشغيل التجميع صامتاً ومباشراً
-        GRADLE_DIR=$(find . -name "gradlew" -exec dirname {} \; | head -n 1)
-        cd $GRADLE_DIR
-        ./gradlew assembleRelease --no-daemon
+        # البحث عن ملف gradlew وتشغيله مباشرة من مساره الحقيقي بدون أمر cd
+        GRADLE_EXEC=$(find . -name "gradlew" | head -n 1)
+        if [ -z "$GRADLE_EXEC" ]; then
+          echo "Critical Error: gradlew execute script not found anywhere!"
+          exit 1
+        fi
+        echo "Executing build via: $GRADLE_EXEC"
+        $GRADLE_EXEC assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        releaseDirectory: app/build/outputs/apk/release
+        # تحديد مسار مجلد المخرجات بدقة عبر محرك البحث التلقائي لضمان عدم فشل الخطوة
+        releaseDirectory: ${{ env.GRADLE_DIR }}/app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
