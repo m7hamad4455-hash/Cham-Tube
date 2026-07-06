@@ -25,19 +25,28 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت أداة Gradle وإعداد بيئة العمل تلقائياً لتخطي الملف المفقود
+      # 3. تثبيت أداة Gradle وإعداد بيئة العمل تلقائياً
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
 
-      # 4. تنظيف وبناء الـ APK باستخدام أمر gradle المدمج في النظام مباشرة
-      - name: Build Release APK
-        run: gradle clean assembleRelease --no-daemon
+      # 4. خطوة سحرية لإنشاء ملف settings.gradle في المجلد الرئيسي إذا كان مفقوداً لتوجيه الأوامر لـ app
+      - name: Ensure Root Project Settings
+        run: |
+          if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
+            echo "include ':app'" > settings.gradle
+          fi
 
-      # 5. حفظ وحقن ملف الـ APK الناتج لتحميله
+      # 5. تنظيف وبناء الـ APK من داخل مجلد التطبيق مباشرة لتفادي خطأ عدم العثور على الـ Tasks
+      - name: Build Release APK
+        run: gradle :app:clean :app:assembleRelease --no-daemon
+
+      # 6. حفظ وحقن ملف الـ APK الناتج لتحميله
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
           name: ChamTube-Release-APK
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: |
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            **/build/outputs/apk/release/*.apk
