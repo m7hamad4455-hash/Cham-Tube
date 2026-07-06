@@ -22,16 +22,38 @@ jobs:
 
     - name: Unzip Project Source Direct
       run: |
-        unzip -o app.zip -d .
-        echo "Project unzipped successfully."
+        # إنشاء مجلد مخصص لفك الضغط لضمان عدم اختلاط الملفات المفككة بالملفات المرفوعة خارجياً
+        mkdir -p unzipped_src
+        unzip -o app.zip -d unzipped_src
+        echo "Project unzipped successfully into unzipped_src."
+        
+        # البحث عن ملف build.gradle الحقيقي المفرغ من الـ zip حصراً
+        BUILD_DIR=$(find unzipped_src -name "build.gradle" -o -name "build.gradle.kts" | grep -v "/app/" | head -n 1)
+        if [ -z "$BUILD_DIR" ]; then
+          # إذا لم يجد ملف خارجي داخل الـ zip، يأخذ مجلد الـ app ويصعد خطوة للأعلى
+          APP_DIR=$(find unzipped_src -name "app" -type d | head -n 1)
+          BUILD_DIR=$(dirname "$APP_DIR")
+        fi
+        
+        echo "Actual Project Root inside zip is: $BUILD_DIR"
+        
+        # توليد ملف gradlew نظيف داخل المجلد الصحيح للمشروع المفكك
+        cd "$BUILD_DIR"
+        gradle wrapper --gradle-version 8.7
+        cd -
+        
+        # حفظ المسار الحقيقي في البيئة للخطوات التالية
+        echo "PROJECT_ROOT=$BUILD_DIR" >> $GITHUB_ENV
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
+        cd ${{ env.PROJECT_ROOT }}
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
         find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
 
     - name: Inject Banner ID and 30s Auto-Refresh Timer
       run: |
+        cd ${{ env.PROJECT_ROOT }}
         FILE_PATH=$(find . -name "BannerAdManager.java" | head -n 1)
         
         if [ -n "$FILE_PATH" ]; then
@@ -60,6 +82,7 @@ jobs:
 
     - name: Patch Rewarded Ad ID Format
       run: |
+        cd ${{ env.PROJECT_ROOT }}
         REWARDED_FILE=$(find . -name "RewardedAdManager.java" | head -n 1)
         
         if [ -n "$REWARDED_FILE" ]; then
@@ -73,25 +96,20 @@ jobs:
 
     - name: Grant Execute Permission to Gradle
       run: |
-        find . -name "gradlew" -exec chmod +x {} \;
+        cd ${{ env.PROJECT_ROOT }}
+        chmod +x gradlew
 
     - name: Build Release APK
       run: |
-        # البحث عن ملف gradlew وتشغيله مباشرة من مساره الحقيقي بدون أمر cd
-        GRADLE_EXEC=$(find . -name "gradlew" | head -n 1)
-        if [ -z "$GRADLE_EXEC" ]; then
-          echo "Critical Error: gradlew execute script not found anywhere!"
-          exit 1
-        fi
-        echo "Executing build via: $GRADLE_EXEC"
-        $GRADLE_EXEC assembleRelease --no-daemon
+        cd ${{ env.PROJECT_ROOT }}
+        ./gradlew assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        # تحديد مسار مجلد المخرجات بدقة عبر محرك البحث التلقائي لضمان عدم فشل الخطوة
-        releaseDirectory: ${{ env.GRADLE_DIR }}/app/build/outputs/apk/release
+        # إرسال مسار ملف المخرجات الموقعة بدقة تامة اعتماداً على المجلد الحقيقي المعزول
+        releaseDirectory: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
