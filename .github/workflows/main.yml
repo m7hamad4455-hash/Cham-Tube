@@ -22,11 +22,15 @@ jobs:
 
     - name: Unzip Project Source
       run: |
-        unzip -o app.zip -d .
-        echo "Project unzipped successfully."
+        unzip -o app.zip -d extracted_project
+        echo "Project unzipped successfully into extracted_project."
+        # البحث عن المجلد الذي يحتوي على gradlew والتحرك إليه
+        GRADLE_DIR=$(find . -name "gradlew" -exec dirname {} \; | head -n 1)
+        echo "GRADLE_DIR=$GRADLE_DIR" >> $GITHUB_ENV
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
+        cd ${{ env.GRADLE_DIR }}
         # 1. إصلاح سطر ADRTLogCatReader المسبب للمشاكل
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
         
@@ -35,6 +39,7 @@ jobs:
 
     - name: Inject Banner ID and 30s Auto-Refresh Timer
       run: |
+        cd ${{ env.GRADLE_DIR }}
         FILE_PATH=$(find . -name "BannerAdManager.java" | head -n 1)
         
         if [ -z "$FILE_PATH" ]; then
@@ -44,10 +49,8 @@ jobs:
         
         echo "Found BannerAdManager at: $FILE_PATH"
         
-        # 1. حقن معرف الإعلان الرسمي الجديد الخاص بك في الكود تلقائياً
-        # يقوم باستبدال أي معرف قديم بالمعرف الجديد RM-19531989-1
+        # 1. حقن معرف الإعلان الرسمي الجديد الخاص بك تلقائياً
         sed -i 's/private static final String BANNER_AD_UNIT_ID = "[^"]*";/private static final String BANNER_AD_UNIT_ID = "RM-19531989-1";/g' "$FILE_PATH"
-        # دعم حالة وجود تعريف عادي بدون كابيتال
         sed -i 's/String adUnitId = "[^"]*";/String adUnitId = "RM-19531989-1";/g' "$FILE_PATH"
         
         # 2. حقن مكتبات المؤقت التكراري في قسم الـ imports
@@ -57,22 +60,25 @@ jobs:
         sed -i '/public class BannerAdManager/a \    private Handler refreshHandler = new Handler(Looper.getMainLooper());\n    private Runnable refreshRunnable;' "$FILE_PATH"
         
         # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية داخل ميثود تحميل الإعلان
-        # يتم البحث عن دالة loadAd وحقن المؤقت بداخلها
         sed -i '/public void loadAd/a \        if (refreshRunnable == null) {\n            refreshRunnable = new Runnable() {\n                @Override\n                public void run() {\n                    loadAd();\n                }\n            };\n        }\n        refreshHandler.removeCallbacks(refreshRunnable);\n        refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
         
         echo "Banner ID and Auto-refresh successfully patched."
 
     - name: Grant Execute Permission to Gradle
-      run: chmod +x gradlew
+      run: |
+        cd ${{ env.GRADLE_DIR }}
+        chmod +x gradlew
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease --no-daemon
+      run: |
+        cd ${{ env.GRADLE_DIR }}
+        ./gradlew assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        releaseDirectory: app/build/outputs/apk/release
+        releaseDirectory: ${{ env.GRADLE_DIR }}/app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
