@@ -18,7 +18,6 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
     - name: Unzip Project Files
       run: |
@@ -32,35 +31,21 @@ jobs:
 
     - name: Enable AndroidX Support
       run: |
-        # إنشاء ملف gradle.properties وضبط الإعدادات المطلوبة لياندكس تلقائياً بالسيرفر
         echo "android.useAndroidX=true" > gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
-        echo "تفعيل خيارات AndroidX لشبكة ياندكس بنجاح. ✅"
 
     - name: Grant Execute Permission for Gradle
       run: |
-        if [ -f "gradlew" ]; then
-          chmod +x gradlew
-        elif [ -f "app/gradlew" ]; then
-          cd app && chmod +x gradlew && cd ..
-        else
-          echo "Warning: gradlew wrapper not found, checking local setup."
-        fi
+        cd app && chmod +x gradlew
 
     - name: Build with Gradle 8.7
       run: |
-        if [ -f "gradlew" ]; then
-          ./gradlew assembleRelease --no-daemon
-        elif [ -f "app/gradlew" ]; then
-          cd app && ./gradlew assembleRelease --no-daemon && cd ..
-        else
-          gradle assembleRelease --no-daemon
-        fi
+        cd app && ./gradlew clean assembleRelease --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ChamTube-Release-APK
         path: |
-          **/build/outputs/apk/release/*.apk
-          **/build/outputs/apk/debug/*.apk
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/apk/debug/*.apk
