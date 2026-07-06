@@ -1,0 +1,20 @@
+# Ignore build outputs
+.gradle/
+/build/
+**/build/
+
+# Ignore local configuration
+local.properties
+
+# Ignore Android Studio files
+.idea/
+*.iml
+
+# Ignore app zip (already in the repo) to avoid re-adding
+app.zip
+
+# Ignore generated signing files
+*.jks
+
+# Ignore Mac files
+.DS_Store
