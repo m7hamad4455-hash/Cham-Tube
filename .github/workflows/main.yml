@@ -1,12 +1,8 @@
-name: Build Cham-Tube APK
+name: Build and Sign Cham-Tube APK
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -14,84 +10,78 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. جلب ملفات المشروع من المستودع
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      # 2. إعداد جافا 17
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'zulu'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'zulu'
+        cache: 'gradle'
 
-      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان النظافة التامة
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
-          cache-disabled: true
+    - name: Unzip Project Source
+      run: |
+        unzip -o app.zip -d .
+        echo "Project unzipped successfully."
 
-      # 4. فك ملفات الـ Zip لتجهيز مجلد التطبيق الأصلي
-      - name: Auto-Confirm File Extraction
-        run: |
-          if [ -f app.zip ]; then
-            unzip -o app.zip || true
-          fi
+    - name: Patch ADRTLogCatReader and Banner Size
+      run: |
+        # 1. إصلاح سطر ADRTLogCatReader المسبب للمشاكل
+        find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
+        
+        # 2. ضبط حجم البانر تلقائياً لملء الشاشة من العرض
+        find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
 
-      # 5. خطوة التوافقية: إجبار المشروع على تثبيت الإصدار الموحد 6.4.1 المتطابق مع منطق أكوادك
-      - name: Force Yandex SDK Version V6 Match
-        run: |
-          BUILD_GRADLE_PATH="app/build.gradle"
-          if [ -f "$BUILD_GRADLE_PATH" ]; then
-            sed -i "s/mobileads:8.1.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
-            sed -i "s/mobileads:7.2.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
-            sed -i "s/mobileads:5.10.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
-            
-            # تعطيل فاحص الـ Lint برمجياً لمنعه من إيقاف تجميع الـ APK بسبب رقم الإصدار القديم
-            sed -i '/android {/a \    lintOptions {\n        checkReleaseBuilds false\n        abortOnError false\n    }' "$BUILD_GRADLE_PATH"
-          fi
+    - name: Inject Banner ID and 30s Auto-Refresh Timer
+      run: |
+        FILE_PATH=$(find . -name "BannerAdManager.java" | head -n 1)
+        
+        if [ -z "$FILE_PATH" ]; then
+          echo "Error: BannerAdManager.java not found!"
+          exit 1
+        fi
+        
+        echo "Found BannerAdManager at: $FILE_PATH"
+        
+        # 1. حقن معرف الإعلان الرسمي الجديد الخاص بك في الكود تلقائياً
+        # يقوم باستبدال أي معرف قديم بالمعرف الجديد RM-19531989-1
+        sed -i 's/private static final String BANNER_AD_UNIT_ID = "[^"]*";/private static final String BANNER_AD_UNIT_ID = "RM-19531989-1";/g' "$FILE_PATH"
+        # دعم حالة وجود تعريف عادي بدون كابيتال
+        sed -i 's/String adUnitId = "[^"]*";/String adUnitId = "RM-19531989-1";/g' "$FILE_PATH"
+        
+        # 2. حقن مكتبات المؤقت التكراري في قسم الـ imports
+        sed -i '/package /a import android.os.Handler;\nimport android.os.Looper;' "$FILE_PATH"
+        
+        # 3. حقن متغيرات المؤقت داخل الكلاس
+        sed -i '/public class BannerAdManager/a \    private Handler refreshHandler = new Handler(Looper.getMainLooper());\n    private Runnable refreshRunnable;' "$FILE_PATH"
+        
+        # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية داخل ميثود تحميل الإعلان
+        # يتم البحث عن دالة loadAd وحقن المؤقت بداخلها
+        sed -i '/public void loadAd/a \        if (refreshRunnable == null) {\n            refreshRunnable = new Runnable() {\n                @Override\n                public void run() {\n                    loadAd();\n                }\n            };\n        }\n        refreshHandler.removeCallbacks(refreshRunnable);\n        refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
+        
+        echo "Banner ID and Auto-refresh successfully patched."
 
-      # 6. المعالجة الذكية الشاملة لملفات الجافا لحل خطأ الحجم وتأكيد التوافق
-      - name: Rewrite Java Codes for V6 Precision Match
-        run: |
-          BANNER_PATH="app/src/main/java/com/chamapps/chamtube/BannerAdManager.java"
-          REWARD_PATH="app/src/main/java/com/chamapps/chamtube/RewardedAdManager.java"
-          
-          # أ) استبدال أي صيغة حجم قديمة بالحجم الثابت الصريح والمدعوم كلياً في إصدار 6
-          if [ -f "$BANNER_PATH" ]; then
-            sed -i 's/BannerAdSize.stickySize([^)]*)/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.inlineSize([^)]*)/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.BANNER_320x50/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
-          fi
-          
-          # ب) تأكيد إصلاح حزمة وتسمية AdDisplayError وتحويلها إلى كائن الاستدعاء القديم المتوافق AdError
-          if [ -f "$REWARD_PATH" ]; then
-            sed -i 's/com.yandex.mobile.ads.common.AdDisplayError/com.yandex.mobile.ads.common.AdError/g' "$REWARD_PATH"
-            sed -i 's/AdDisplayError adDisplayError/AdError adDisplayError/g' "$REWARD_PATH"
-          fi
+    - name: Grant Execute Permission to Gradle
+      run: chmod +x gradlew
 
-      # 7. حذف سطر AIDE تلقائياً من الملف المفتوح لمنع خطأ التتبع على السيرفر
-      - name: Auto-Remove AIDE Code
-        run: |
-          FILE_PATH="app/src/main/java/com/chamapps/chamtube/MainActivity.java"
-          if [ -f "$FILE_PATH" ]; then
-            sed -i '/ADRTLogCatReader.onContext/d' "$FILE_PATH"
-          fi
+    - name: Build Release APK
+      run: ./gradlew assembleRelease --no-daemon
 
-      # 8. بدء البناء الصامت النهائي للتطبيق وتجميع الـ APK
-      - name: Build Release APK
-        run: |
-          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
-          gradle :app:clean :app:assembleRelease --no-daemon --stacktrace --console=plain < /dev/null
-        env:
-          CI: true
+    - name: Sign Release APK
+      uses: r0adkll/sign-android-release@v1
+      id: sign_app
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      env:
+        BUILD_TOOLS_VERSION: "34.0.0"
 
-      # 9. رفع وحفظ ملف الـ APK النهائي النظيف لتنزيله مباشرة وثبيت التطبيق
-      - name: Upload Build Artifact (APK)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ChamTube-Release-APK
-          path: |
-            app/build/outputs/apk/release/*.apk
-            **/build/outputs/apk/release/*.apk
+    - name: Upload Signed APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Cham-Tube-Signed-Release
+        path: ${{ steps.sign_app.outputs.signedReleaseFile }}
