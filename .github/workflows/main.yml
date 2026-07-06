@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: # يتيح لك تشغيل البناء يدوياً من موقع غيت هاب
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,23 +18,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. إعداد بيئة جافا (Java 17 متوافقة تماماً مع Gradle 8.7 و Target SDK 34)
+      # 2. إعداد بيئة جافا (Java 17)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'zulu'
-          cache: gradle
 
-      # 3. إعطاء صلاحيات التنفيذ لملف Gradle Wrapper
-      - name: Grant Execute Permission for Gradlew
-        run: chmod +x gradlew
+      # 3. تثبيت أداة Gradle وإعداد بيئة العمل تلقائياً لتخطي الملف المفقود
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
 
-      # 4. تنظيف الكاش القديم وبناء نسخة الـ APK النهائية باستخدام الأمر الكامل
-      - name: Build Release APK with Gradle
-        run: ./gradlew clean assembleRelease --no-daemon
+      # 4. تنظيف وبناء الـ APK باستخدام أمر gradle المدمج في النظام مباشرة
+      - name: Build Release APK
+        run: gradle clean assembleRelease --no-daemon
 
-      # 5. حفظ وحقن ملف الـ APK الناتج لكي تتمكن من تحميله مباشرة بعد انتهاء البناء
+      # 5. حفظ وحقن ملف الـ APK الناتج لتحميله
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
