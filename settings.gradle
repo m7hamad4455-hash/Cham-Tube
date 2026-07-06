@@ -1,17 +1,23 @@
-pluginManagement {
+buildscript {
     repositories {
         google()
         mavenCentral()
     }
+    dependencies {
+        // أداة تجميع الأندرويد المتوافقة مع إصدار مشروعك
+        classpath 'com.android.tools.build:gradle:8.5.0'
+    }
 }
-dependencyResolutionManagement {
+
+allprojects {
     repositories {
         google()
         mavenCentral()
-        
-        // مستودع ياندكس الرسمي المخصص لتحميل مكتبة الإعلانات عبر السيرفر الأونلاين
+        // وضع المستودع هنا ليراه السيرفر أثناء تجميع كافة الملفات
         maven { url "https://repo.yandex.ru/maven/" }
     }
 }
-rootProject.name = "ChamTube"
-include ':app'
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
