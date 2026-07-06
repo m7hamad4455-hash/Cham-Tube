@@ -21,6 +21,8 @@ jobs:
 
     - name: Unzip Project Files First
       run: |
+        # حذف المجلد القديم كلياً لضمان عدم بقاء الملفات المعترضة أو التالفة
+        rm -rf app
         if [ -f "app.zip" ]; then
           echo "Unzipping app.zip..."
           unzip -o app.zip
@@ -31,7 +33,6 @@ jobs:
 
     - name: Install Gradle Wrapper Safely
       run: |
-        # الآن المجلد موجود، توليد ملفات البناء سيعبر بسلام وبدون أخطاء
         gradle wrapper --gradle-version 8.7
         echo "تم توليد ملف gradlew الناقص بنجاح. ✅"
 
@@ -51,7 +52,6 @@ jobs:
 
     - name: Build with Gradle 8.7
       run: |
-        # البدء الفوري بالتجميع النظيف للتطبيق
         ./gradlew clean assembleRelease --no-daemon
 
     - name: Upload APK Artifact
