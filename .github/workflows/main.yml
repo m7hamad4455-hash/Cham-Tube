@@ -25,7 +25,7 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش
+      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان النظافة
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -39,7 +39,7 @@ jobs:
             unzip -o app.zip || true
           fi
 
-      # 5. خطوة التوافقية الذهبية: إجبار المشروع على استخدام إصدار ياندكس V6 المطابق لأكوادك الهجينة
+      # 5. خطوة التوافقية: إجبار المشروع على تثبيت الإصدار الموحد 6.4.1 المتطابق مع منطق أكوادك
       - name: Force Yandex SDK Version V6 Match
         run: |
           BUILD_GRADLE_PATH="app/build.gradle"
@@ -49,16 +49,27 @@ jobs:
             sed -i "s/mobileads:5.10.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
           fi
 
-      # 6. إصلاح دالة الحجم برمجياً داخل BannerAdManager لتتوافق مع معايير V6 المستقرة
-      - name: Fix Banner Size Code for V6
+      # 6. المعالجة الذكية الشاملة لأكواد الجافا لحل الأخطاء الثلاثة المتبقية فوراً قبل التجميع
+      - name: Rewrite Java Codes for V6 Precision Match
         run: |
           BANNER_PATH="app/src/main/java/com/chamapps/chamtube/BannerAdManager.java"
+          REWARD_PATH="app/src/main/java/com/chamapps/chamtube/RewardedAdManager.java"
+          
+          # أ) إصلاح خطأ دالة الحجم في البانر وإرجاع الحجم القياسي المدعوم 100% في إصدار 6
           if [ -f "$BANNER_PATH" ]; then
-            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.inlineSize(this.activity, 320)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.inlineSize(activity, 320)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.inlineSize(this.activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.inlineSize(activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
+          fi
+          
+          # ب) إصلاح أخطاء حزمة وتسمية AdDisplayError في كود المكافأة وتحويلها إلى كائن الاستدعاء القديم المتوافق AdError
+          if [ -f "$REWARD_PATH" ]; then
+            sed -i 's/com.yandex.mobile.ads.common.AdDisplayError/com.yandex.mobile.ads.common.AdError/g' "$REWARD_PATH"
+            sed -i 's/AdDisplayError adDisplayError/AdError adDisplayError/g' "$REWARD_PATH"
           fi
 
-      # 7. حذف سطر AIDE تلقائياً برمجياً من الملف لمنع الخطأ الأصلي
+      # 7. حذف سطر AIDE تلقائياً من الملف المفتوح لمنع خطأ التتبع على السيرفر
       - name: Auto-Remove AIDE Code
         run: |
           FILE_PATH="app/src/main/java/com/chamapps/chamtube/MainActivity.java"
@@ -66,7 +77,7 @@ jobs:
             sed -i '/ADRTLogCatReader.onContext/d' "$FILE_PATH"
           fi
 
-      # 8. بناء التطبيق مباشرة بأمر صامت لمنع أي توقف يدوية
+      # 8. بدء البناء الصامت النهائي للتطبيق وتجميع الـ APK
       - name: Build Release APK
         run: |
           echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
@@ -74,7 +85,7 @@ jobs:
         env:
           CI: true
 
-      # 9. رفع وحفظ ملف الـ APK النهائي الجاهز للتحميل والتثبيت
+      # 9. رفع وحفظ ملف الـ APK النهائي النظيف لتنزيله مباشرة وثبيت التطبيق
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
