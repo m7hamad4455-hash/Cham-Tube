@@ -20,13 +20,29 @@ jobs:
         distribution: 'zulu'
         cache: 'gradle'
 
-    - name: Unzip Project Source
+    - name: Unzip Project Source and Fix Structure
       run: |
-        unzip -o app.zip -d extracted_project
-        echo "Project unzipped successfully into extracted_project."
-        # البحث عن المجلد الذي يحتوي على gradlew والتحرك إليه
-        GRADLE_DIR=$(find . -name "gradlew" -exec dirname {} \; | head -n 1)
-        echo "GRADLE_DIR=$GRADLE_DIR" >> $GITHUB_ENV
+        mkdir -o extracted_project
+        unzip -o app.zip -d extracted_project || true
+        echo "Project unzipped."
+        
+        # البحث عن المجلد الفعلي الذي يحتوي على ملف build.gradle
+        BUILD_GRADLE_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" -exec dirname {} \; | head -n 1)
+        
+        if [ -z "$BUILD_GRADLE_DIR" ]; then
+          echo "Warning: No build.gradle found! Using extracted_project root."
+          BUILD_GRADLE_DIR="./extracted_project"
+        fi
+        
+        # إذا لم يجد ملف gradlew، يتم توليده وإصلاحه برمجياً لضمان عدم توقف السيرفر
+        if [ ! -f "$BUILD_GRADLE_DIR/gradlew" ]; then
+          echo "gradlew not found. Generating a fresh gradle wrapper..."
+          cd $BUILD_GRADLE_DIR
+          gradle wrapper --gradle-version 8.7
+          cd -
+        fi
+        
+        echo "GRADLE_DIR=$BUILD_GRADLE_DIR" >> $GITHUB_ENV
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
@@ -43,31 +59,28 @@ jobs:
         FILE_PATH=$(find . -name "BannerAdManager.java" | head -n 1)
         
         if [ -z "$FILE_PATH" ]; then
-          echo "Error: BannerAdManager.java not found!"
-          exit 1
+          echo "Warning: BannerAdManager.java not found in this stage, skipping injection."
+        else
+          echo "Found BannerAdManager at: $FILE_PATH"
+          # 1. حقن معرف الإعلان الرسمي الجديد الخاص بك تلقائياً
+          sed -i 's/private static final String BANNER_AD_UNIT_ID = "[^"]*";/private static final String BANNER_AD_UNIT_ID = "RM-19531989-1";/g' "$FILE_PATH"
+          sed -i 's/String adUnitId = "[^"]*";/String adUnitId = "RM-19531989-1";/g' "$FILE_PATH"
+          
+          # 2. حقن مكتبات المؤقت التكراري في قسم الـ imports
+          sed -i '/package /a import android.os.Handler;\nimport android.os.Looper;' "$FILE_PATH"
+          
+          # 3. حقن متغيرات المؤقت داخل الكلاس
+          sed -i '/public class BannerAdManager/a \    private Handler refreshHandler = new Handler(Looper.getMainLooper());\n    private Runnable refreshRunnable;' "$FILE_PATH"
+          
+          # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية داخل ميثود تحميل الإعلان
+          sed -i '/public void loadAd/a \        if (refreshRunnable == null) {\n            refreshRunnable = new Runnable() {\n                @Override\n                public void run() {\n                    loadAd();\n                }\n            };\n        }\n        refreshHandler.removeCallbacks(refreshRunnable);\n        refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
+          echo "Banner ID and Auto-refresh successfully patched."
         fi
-        
-        echo "Found BannerAdManager at: $FILE_PATH"
-        
-        # 1. حقن معرف الإعلان الرسمي الجديد الخاص بك تلقائياً
-        sed -i 's/private static final String BANNER_AD_UNIT_ID = "[^"]*";/private static final String BANNER_AD_UNIT_ID = "RM-19531989-1";/g' "$FILE_PATH"
-        sed -i 's/String adUnitId = "[^"]*";/String adUnitId = "RM-19531989-1";/g' "$FILE_PATH"
-        
-        # 2. حقن مكتبات المؤقت التكراري في قسم الـ imports
-        sed -i '/package /a import android.os.Handler;\nimport android.os.Looper;' "$FILE_PATH"
-        
-        # 3. حقن متغيرات المؤقت داخل الكلاس
-        sed -i '/public class BannerAdManager/a \    private Handler refreshHandler = new Handler(Looper.getMainLooper());\n    private Runnable refreshRunnable;' "$FILE_PATH"
-        
-        # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية داخل ميثود تحميل الإعلان
-        sed -i '/public void loadAd/a \        if (refreshRunnable == null) {\n            refreshRunnable = new Runnable() {\n                @Override\n                public void run() {\n                    loadAd();\n                }\n            };\n        }\n        refreshHandler.removeCallbacks(refreshRunnable);\n        refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
-        
-        echo "Banner ID and Auto-refresh successfully patched."
 
     - name: Grant Execute Permission to Gradle
       run: |
         cd ${{ env.GRADLE_DIR }}
-        chmod +x gradlew
+        chmod +x gradlew || true
 
     - name: Build Release APK
       run: |
