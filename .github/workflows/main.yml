@@ -21,7 +21,6 @@ jobs:
 
     - name: Unzip Project Files First
       run: |
-        # حذف المجلد القديم كلياً لضمان عدم بقاء الملفات المعترضة أو التالفة
         rm -rf app
         if [ -f "app.zip" ]; then
           echo "Unzipping app.zip..."
@@ -31,10 +30,18 @@ jobs:
           exit 1
         fi
 
+    - name: Clean AIDE Local Tracking Codes
+      run: |
+        # حذف السطر الذي يسبب اعتراض السيرفر أونلاين تلقائياً قبل التجميع
+        if [ -f "app/src/main/java/com/chamapps/chamtube/MainActivity.java" ]; then
+          sed -i '/ADRTLogCatReader.onContext/d' app/src/main/java/com/chamapps/chamtube/MainActivity.java
+          echo "تم تنظيف كود تعقب الـ AIDE بنجاح لتوافق السيرفر الأونلاين. ✅"
+        fi
+
     - name: Install Gradle Wrapper Safely
       run: |
         gradle wrapper --gradle-version 8.7
-        echo "تم توليد ملف gradlew الناقص بنجاح. ✅"
+        echo "تمت تهيئة ملف gradlew بنجاح. ✅"
 
     - name: Enable AndroidX Support
       run: |
