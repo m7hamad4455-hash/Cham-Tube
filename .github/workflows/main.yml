@@ -19,20 +19,24 @@ jobs:
         java-version: '17'
         distribution: 'zulu'
 
-    # إجبار السيرفر على جلب وتثبيت إصدار Gradle 8.7 الخاص بتطبيقك لمنع الـ 9.6 تماماً
+    # تثبيت إصدار Gradle 8.7 لتوافق كامل مع مشروعك
     - name: Setup Gradle 8.7
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: '8.7'
 
-    - name: Unzip and Clean Conflict Files
+    - name: Unzip and Generate Settings File
       run: |
-        # 1. تدمير وحذف أي ملفات إعداد مرفوعة خارجياً لمنع التضارب نهائياً
+        # 1. تنظيف وتدمير أي ملفات قديمة مسببة للتضارب
         rm -f settings.gradle build.gradle || true
         
-        # 2. فك الضغط مباشرة في الجذر الحالي للسيرفر
+        # 2. فك الضغط في الجذر
         unzip -o app.zip -d .
-        echo "Project unzipped successfully into root."
+        echo "Project unzipped successfully."
+        
+        # 3. توليد ملف settings.gradle المفقود برمجياً لربط مجلد app الإجباري
+        echo "include ':app'" > settings.gradle
+        echo "Generated missing settings.gradle to fix root configuration."
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
@@ -59,7 +63,7 @@ jobs:
           # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية (30000ms)
           sed -i '/AdRequest adRequest = new AdRequest.Builder().build();/i \                if (refreshRunnable == null) {\n                    refreshRunnable = new Runnable() {\n                        @Override\n                        public void run() {\n                            if (currentBanner != null) {\n                                AdRequest refreshRequest = new AdRequest.Builder().build();\n                                currentBanner.loadAd(refreshRequest);\n                                refreshHandler.postDelayed(this, 30000);\n                            }\n                        }\n                    };\n                }\n                refreshHandler.removeCallbacks(refreshRunnable);\n                refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
           
-          # 5. إلغاء جدولة المؤقت التكراري بأمان عند إيقاف الإعلانات لضمان استقرار التطبيق
+          # 5. إلغاء جدولة المؤقت التكراري بأمان عند إيقاف الإعلانات
           sed -i '/public void stopBannerAds()/a \        refreshHandler.removeCallbacks(refreshRunnable);' "$FILE_PATH"
           
           echo "Auto-refresh and Banner Ad ID patched successfully."
@@ -83,14 +87,13 @@ jobs:
 
     - name: Build Release APK
       run: |
-        # تشغيل بناء التطبيق صامتاً باستخدام أمر الجذور وإصدار 8.7 المفروض
+        # تشغيل البناء بعد تأمين ملف الإعداد
         gradle assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        # البحث التلقائي والدقيق عن مجلد المخرجات الناتج عن بناء AIDE
         releaseDirectory: app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
