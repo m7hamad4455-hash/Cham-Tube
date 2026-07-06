@@ -18,34 +18,36 @@ jobs:
       with:
         java-version: '17'
         distribution: 'zulu'
-        cache: 'gradle'
 
-    - name: Unzip Project Source Direct
+    # إجبار السيرفر على جلب وتثبيت إصدار Gradle 8.7 الخاص بتطبيقك لمنع الـ 9.6 تماماً
+    - name: Setup Gradle 8.7
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.7'
+
+    - name: Unzip and Clean Conflict Files
       run: |
-        # إنشاء مجلد مخصص وفق الضغط داخله بناءً على بنية ملفك
-        mkdir -p unzipped_src
-        unzip -o app.zip -d unzipped_src
-        echo "Project unzipped successfully into unzipped_src."
+        # 1. تدمير وحذف أي ملفات إعداد مرفوعة خارجياً لمنع التضارب نهائياً
+        rm -f settings.gradle build.gradle || true
         
-        # تثبيت مسار المشروع الإجباري بناءً على الهيكلية الظاهرة في الـ zip
-        echo "PROJECT_ROOT=unzipped_src" >> $GITHUB_ENV
+        # 2. فك الضغط مباشرة في الجذر الحالي للسيرفر
+        unzip -o app.zip -d .
+        echo "Project unzipped successfully into root."
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
-        cd ${{ env.PROJECT_ROOT }}
-        # إزالة سطر ADRT المسبب للمشاكل في بيئة AIDE
+        # إزالة سطر ADRT المسبب للمشاكل في بيئة AIDE وتعديل حجم البانر
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
         find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
 
     - name: Inject Banner ID and 30s Auto-Refresh Timer
       run: |
-        cd ${{ env.PROJECT_ROOT }}
         FILE_PATH=$(find . -name "BannerAdManager.java" | head -n 1)
         
         if [ -n "$FILE_PATH" ]; then
           echo "Found BannerAdManager at: $FILE_PATH"
           
-          # 1. إصلاح معرف البانر ليتطابق مع المعرف النشط في لوحتك (حذف الشرطة الزائدة)
+          # 1. إصلاح معرف البانر (حذف الشرطة الزائدة) ليتطابق مع اللوحة الرسمية
           sed -i 's/"R-M-19531989-1"/"RM-19531989-1"/g' "$FILE_PATH"
           
           # 2. حقن مكتبات أندرويد الرسمية للـ Handler
@@ -54,10 +56,10 @@ jobs:
           # 3. حقن متغيرات المؤقت التكراري داخل كلاس BannerAdManager
           sed -i '/public class BannerAdManager/a \    private final Handler refreshHandler = new Handler(Looper.getMainLooper());\n    private Runnable refreshRunnable;' "$FILE_PATH"
           
-          # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية (30000ms) عند بناء طلب الإعلان
+          # 4. حقن منطق إعادة التحميل التلقائي كل 30 ثانية (30000ms)
           sed -i '/AdRequest adRequest = new AdRequest.Builder().build();/i \                if (refreshRunnable == null) {\n                    refreshRunnable = new Runnable() {\n                        @Override\n                        public void run() {\n                            if (currentBanner != null) {\n                                AdRequest refreshRequest = new AdRequest.Builder().build();\n                                currentBanner.loadAd(refreshRequest);\n                                refreshHandler.postDelayed(this, 30000);\n                            }\n                        }\n                    };\n                }\n                refreshHandler.removeCallbacks(refreshRunnable);\n                refreshHandler.postDelayed(refreshRunnable, 30000);' "$FILE_PATH"
           
-          # 5. إلغاء جدولة المؤقت التكراري بأمان عند إيقاف الإعلانات
+          # 5. إلغاء جدولة المؤقت التكراري بأمان عند إيقاف الإعلانات لضمان استقرار التطبيق
           sed -i '/public void stopBannerAds()/a \        refreshHandler.removeCallbacks(refreshRunnable);' "$FILE_PATH"
           
           echo "Auto-refresh and Banner Ad ID patched successfully."
@@ -68,7 +70,6 @@ jobs:
 
     - name: Patch Rewarded Ad ID Format
       run: |
-        cd ${{ env.PROJECT_ROOT }}
         REWARDED_FILE=$(find . -name "RewardedAdManager.java" | head -n 1)
         
         if [ -n "$REWARDED_FILE" ]; then
@@ -80,18 +81,17 @@ jobs:
           exit 1
         fi
 
-    - name: Build Release APK via System Gradle
+    - name: Build Release APK
       run: |
-        cd ${{ env.PROJECT_ROOT }}
-        # تشغيل نظام Gradle الخاص بالسيرفر مباشرة لتوافق بيئة بناء AIDE
+        # تشغيل بناء التطبيق صامتاً باستخدام أمر الجذور وإصدار 8.7 المفروض
         gradle assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        # إرسال مسار المخرجات الحقيقي بناءً على الترتيب الافتراضي
-        releaseDirectory: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/release
+        # البحث التلقائي والدقيق عن مجلد المخرجات الناتج عن بناء AIDE
+        releaseDirectory: app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
