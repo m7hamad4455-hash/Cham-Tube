@@ -62,9 +62,15 @@ jobs:
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
-        # إزالة سطر ADRT المسبب للمشاكل في بيئة AIDE وتعديل حجم البانر
+        # 1. إزالة ملف ADRT المسبب للمشاكل في بيئة AIDE وتعديل حجم البانر
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
         find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
+        
+        # 2. حذف سطر الاستدعاء المسبب للخطأ داخل MainActivity
+        find . -name "MainActivity.java" -exec sed -i '/ADRTLogCatReader/d' {} +
+        
+        # 3. إجبار ملف بناء التطبيق الداخلي على تثبيت إصدار ياندكس المتوافق مع كودك الحالي 6.4.1 لمنع تعارض V8
+        find . -name "build.gradle" -exec sed -i 's/com.yandex.android:mobileads:[^"'\''']*/com.yandex.android:mobileads:6.4.1/g' {} +
 
     - name: Inject Banner ID and 30s Auto-Refresh Timer
       run: |
@@ -109,7 +115,7 @@ jobs:
 
     - name: Build Release APK
       run: |
-        # تشغيل البناء بعد تأمين المستودعات والـ Plugins كاملة
+        # تشغيل البناء بعد تأمين المستودعات والـ Plugins كاملة والتنظيف البرمجي
         gradle assembleRelease --no-daemon
 
     - name: Sign Release APK
