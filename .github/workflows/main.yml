@@ -25,18 +25,40 @@ jobs:
       with:
         gradle-version: '8.7'
 
-    - name: Unzip and Generate Settings File
+    - name: Unzip and Generate Central Repositories
       run: |
-        # 1. تنظيف وتدمير أي ملفات قديمة مسببة للتضارب
+        # 1. تنظيف وتدمير أي ملفات قديمة مسببة للتضارب في الجذر
         rm -f settings.gradle build.gradle || true
         
-        # 2. فك الضغط في الجذر
+        # 2. فك الضغط في الجذر الحالي
         unzip -o app.zip -d .
         echo "Project unzipped successfully."
         
-        # 3. توليد ملف settings.gradle المفقود برمجياً لربط مجلد app الإجباري
+        # 3. توليد ملف settings.gradle المفقود برمجياً لربط مجلد app الإجبارى
         echo "include ':app'" > settings.gradle
-        echo "Generated missing settings.gradle to fix root configuration."
+        
+        # 4. بناء ملف build.gradle الرئيسي في الجذر وحقن مستودعات جوجل وياندكس لحل مشكلة الـ Plugin
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                // استدعاء أدوات بناء أندرويد الرسمية المتوافقة مع إصدار Gradle 8.7
+                classpath 'com.android.tools.build:gradle:8.3.2'
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+                // مستودع مكتبة إعلانات ياندكس الرسمي
+                maven { url "https://repo.yandex.ru/repository/maven3/" }
+            }
+        }
+        EOF
+        echo "Root build.gradle and settings.gradle successfully created with official repositories."
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
@@ -87,7 +109,7 @@ jobs:
 
     - name: Build Release APK
       run: |
-        # تشغيل البناء بعد تأمين ملف الإعداد
+        # تشغيل البناء بعد تأمين المستودعات والـ Plugins كاملة
         gradle assembleRelease --no-daemon
 
     - name: Sign Release APK
