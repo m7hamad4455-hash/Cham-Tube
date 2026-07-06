@@ -22,32 +22,18 @@ jobs:
 
     - name: Unzip Project Source Direct
       run: |
-        # إنشاء مجلد مخصص لفك الضغط لضمان عدم اختلاط الملفات المفككة بالملفات المرفوعة خارجياً
+        # إنشاء مجلد مخصص وفق الضغط داخله بناءً على بنية ملفك
         mkdir -p unzipped_src
         unzip -o app.zip -d unzipped_src
         echo "Project unzipped successfully into unzipped_src."
         
-        # البحث عن ملف build.gradle الحقيقي المفرغ من الـ zip حصراً
-        BUILD_DIR=$(find unzipped_src -name "build.gradle" -o -name "build.gradle.kts" | grep -v "/app/" | head -n 1)
-        if [ -z "$BUILD_DIR" ]; then
-          # إذا لم يجد ملف خارجي داخل الـ zip، يأخذ مجلد الـ app ويصعد خطوة للأعلى
-          APP_DIR=$(find unzipped_src -name "app" -type d | head -n 1)
-          BUILD_DIR=$(dirname "$APP_DIR")
-        fi
-        
-        echo "Actual Project Root inside zip is: $BUILD_DIR"
-        
-        # توليد ملف gradlew نظيف داخل المجلد الصحيح للمشروع المفكك
-        cd "$BUILD_DIR"
-        gradle wrapper --gradle-version 8.7
-        cd -
-        
-        # حفظ المسار الحقيقي في البيئة للخطوات التالية
-        echo "PROJECT_ROOT=$BUILD_DIR" >> $GITHUB_ENV
+        # تثبيت مسار المشروع الإجباري بناءً على الهيكلية الظاهرة في الـ zip
+        echo "PROJECT_ROOT=unzipped_src" >> $GITHUB_ENV
 
     - name: Patch ADRTLogCatReader and Banner Size
       run: |
         cd ${{ env.PROJECT_ROOT }}
+        # إزالة سطر ADRT المسبب للمشاكل في بيئة AIDE
         find . -name "ADRTLogCatReader.java" -exec sed -i '/ADRTLogCatReader/d' {} +
         find . -name "*activity_main.xml" -o -name "*fragment_ad.xml" | xargs sed -i 's/wrap_content/match_parent/g' || true
 
@@ -94,21 +80,17 @@ jobs:
           exit 1
         fi
 
-    - name: Grant Execute Permission to Gradle
+    - name: Build Release APK via System Gradle
       run: |
         cd ${{ env.PROJECT_ROOT }}
-        chmod +x gradlew
-
-    - name: Build Release APK
-      run: |
-        cd ${{ env.PROJECT_ROOT }}
-        ./gradlew assembleRelease --no-daemon
+        # تشغيل نظام Gradle الخاص بالسيرفر مباشرة لتوافق بيئة بناء AIDE
+        gradle assembleRelease --no-daemon
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
       with:
-        # إرسال مسار ملف المخرجات الموقعة بدقة تامة اعتماداً على المجلد الحقيقي المعزول
+        # إرسال مسار المخرجات الحقيقي بناءً على الترتيب الافتراضي
         releaseDirectory: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.ALIAS }}
