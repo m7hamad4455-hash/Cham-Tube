@@ -25,7 +25,7 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان النظافة
+      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان النظافة التامة
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -49,21 +49,22 @@ jobs:
             sed -i "s/mobileads:5.10.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
           fi
 
-      # 6. المعالجة الذكية الشاملة لأكواد الجافا لحل الأخطاء الثلاثة المتبقية فوراً قبل التجميع
+      # 6. المعالجة الذكية لحل الخطأ الأخير المتعلق بمسمى حجم البانر الثابت في الإصدار 6 واختصار معايير التوافق
       - name: Rewrite Java Codes for V6 Precision Match
         run: |
           BANNER_PATH="app/src/main/java/com/chamapps/chamtube/BannerAdManager.java"
           REWARD_PATH="app/src/main/java/com/chamapps/chamtube/RewardedAdManager.java"
           
-          # أ) إصلاح خطأ دالة الحجم في البانر وإرجاع الحجم القياسي المدعوم 100% في إصدار 6
+          # أ) إصلاح صيغة حجم البانر الأخيرة المتوافقة 100% مع الإصدار 6 وحذف الصيغ المرفوضة
           if [ -f "$BANNER_PATH" ]; then
-            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.inlineSize(this.activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.inlineSize(activity, 320)/BannerAdSize.BANNER_320x50/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.inlineSize(this.activity, 320)/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.banner_320x50(activity)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.inlineSize(activity, 320)/BannerAdSize.banner_320x50(activity)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.BANNER_320x50/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
           fi
           
-          # ب) إصلاح أخطاء حزمة وتسمية AdDisplayError في كود المكافأة وتحويلها إلى كائن الاستدعاء القديم المتوافق AdError
+          # ب) تأكيد إصلاح حزمة وتسمية AdDisplayError وتحويلها إلى كائن الاستدعاء القديم المتوافق AdError
           if [ -f "$REWARD_PATH" ]; then
             sed -i 's/com.yandex.mobile.ads.common.AdDisplayError/com.yandex.mobile.ads.common.AdError/g' "$REWARD_PATH"
             sed -i 's/AdDisplayError adDisplayError/AdError adDisplayError/g' "$REWARD_PATH"
