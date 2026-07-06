@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. جلب ملفات المشروع
+      # 1. جلب ملفات المشروع من المستودع
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -25,30 +25,40 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت Gradle 8.7
+      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
           cache-disabled: true
 
-      # 4. فك ملفات الـ Zip لتجهيز مجلد app الأصلي لديك
+      # 4. فك ملفات الـ Zip لتجهيز مجلد التطبيق الأصلي
       - name: Auto-Confirm File Extraction
         run: |
           if [ -f app.zip ]; then
             unzip -o app.zip || true
           fi
 
-      # 5. خطوة التوافقية الإجبارية: إجبار الـ build.gradle على استخدام إصدار ياندكس V5 المتطابق مع جافا بالكامل
-      - name: Force Yandex SDK Version Match
+      # 5. خطوة التوافقية الذهبية: إجبار المشروع على استخدام إصدار ياندكس V6 المطابق لأكوادك الهجينة
+      - name: Force Yandex SDK Version V6 Match
         run: |
           BUILD_GRADLE_PATH="app/build.gradle"
           if [ -f "$BUILD_GRADLE_PATH" ]; then
-            sed -i "s/mobileads:8.1.0/mobileads:5.10.0/g" "$BUILD_GRADLE_PATH"
-            sed -i "s/mobileads:7.2.0/mobileads:5.10.0/g" "$BUILD_GRADLE_PATH"
+            sed -i "s/mobileads:8.1.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
+            sed -i "s/mobileads:7.2.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
+            sed -i "s/mobileads:5.10.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
           fi
 
-      # 6. حذف سطر AIDE تلقائياً برمجياً من الملف المفكوك لمنع الخطأ السابق
+      # 6. إصلاح دالة الحجم برمجياً داخل BannerAdManager لتتوافق مع معايير V6 المستقرة
+      - name: Fix Banner Size Code for V6
+        run: |
+          BANNER_PATH="app/src/main/java/com/chamapps/chamtube/BannerAdManager.java"
+          if [ -f "$BANNER_PATH" ]; then
+            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.inlineSize(this.activity, 320)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.inlineSize(activity, 320)/g' "$BANNER_PATH"
+          fi
+
+      # 7. حذف سطر AIDE تلقائياً برمجياً من الملف لمنع الخطأ الأصلي
       - name: Auto-Remove AIDE Code
         run: |
           FILE_PATH="app/src/main/java/com/chamapps/chamtube/MainActivity.java"
@@ -56,7 +66,7 @@ jobs:
             sed -i '/ADRTLogCatReader.onContext/d' "$FILE_PATH"
           fi
 
-      # 7. بناء التطبيق مباشرة بأمر صامت مانع للمدخلات اليدوية
+      # 8. بناء التطبيق مباشرة بأمر صامت لمنع أي توقف يدوية
       - name: Build Release APK
         run: |
           echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
@@ -64,7 +74,7 @@ jobs:
         env:
           CI: true
 
-      # 8. رفع وحفظ ملف الـ APK لتتمكن من تحميله فوراً
+      # 9. رفع وحفظ ملف الـ APK النهائي الجاهز للتحميل والتثبيت
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
