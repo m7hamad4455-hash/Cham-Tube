@@ -25,21 +25,30 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان جلب مكاتب ياندكس الحديثة
+      # 3. تثبيت Gradle 8.7
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
           cache-disabled: true
 
-      # 4. فك الملفات المضغوطة بشكل آمن وتلقائي
+      # 4. فك ملفات الـ Zip لتجهيز مجلد app الأصلي لديك
       - name: Auto-Confirm File Extraction
         run: |
           if [ -f app.zip ]; then
             unzip -o app.zip || true
           fi
 
-      # 5. خطوة ذكية لحذف سطر ADRTLogCatReader تلقائياً من الكود قبل البناء لمنع الخطأ
+      # 5. خطوة التوافقية الإجبارية: إجبار الـ build.gradle على استخدام إصدار ياندكس V5 المتطابق مع جافا بالكامل
+      - name: Force Yandex SDK Version Match
+        run: |
+          BUILD_GRADLE_PATH="app/build.gradle"
+          if [ -f "$BUILD_GRADLE_PATH" ]; then
+            sed -i "s/mobileads:8.1.0/mobileads:5.10.0/g" "$BUILD_GRADLE_PATH"
+            sed -i "s/mobileads:7.2.0/mobileads:5.10.0/g" "$BUILD_GRADLE_PATH"
+          fi
+
+      # 6. حذف سطر AIDE تلقائياً برمجياً من الملف المفكوك لمنع الخطأ السابق
       - name: Auto-Remove AIDE Code
         run: |
           FILE_PATH="app/src/main/java/com/chamapps/chamtube/MainActivity.java"
@@ -47,7 +56,7 @@ jobs:
             sed -i '/ADRTLogCatReader.onContext/d' "$FILE_PATH"
           fi
 
-      # 6. بناء التطبيق وضمان عدم وقوف السيرفر
+      # 7. بناء التطبيق مباشرة بأمر صامت مانع للمدخلات اليدوية
       - name: Build Release APK
         run: |
           echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
@@ -55,7 +64,7 @@ jobs:
         env:
           CI: true
 
-      # 7. رفع ملف الـ APK الناتج للتحميل
+      # 8. رفع وحفظ ملف الـ APK لتتمكن من تحميله فوراً
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
