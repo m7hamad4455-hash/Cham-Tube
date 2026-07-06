@@ -19,13 +19,7 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Install Gradle Wrapper Automatically
-      run: |
-        # توليد وإنشاء ملفات البناء الحيوية الناقصة تلقائياً في السيرفر
-        gradle wrapper --gradle-version 8.7
-        echo "تم توليد ملف gradlew الناقص بنجاح. ✅"
-
-    - name: Unzip Project Files
+    - name: Unzip Project Files First
       run: |
         if [ -f "app.zip" ]; then
           echo "Unzipping app.zip..."
@@ -34,6 +28,12 @@ jobs:
           echo "Error: app.zip not found!"
           exit 1
         fi
+
+    - name: Install Gradle Wrapper Safely
+      run: |
+        # الآن المجلد موجود، توليد ملفات البناء سيعبر بسلام وبدون أخطاء
+        gradle wrapper --gradle-version 8.7
+        echo "تم توليد ملف gradlew الناقص بنجاح. ✅"
 
     - name: Enable AndroidX Support
       run: |
@@ -51,7 +51,7 @@ jobs:
 
     - name: Build with Gradle 8.7
       run: |
-        # بدء عملية التجميع النظيفة الفورية للتطبيق
+        # البدء الفوري بالتجميع النظيف للتطبيق
         ./gradlew clean assembleRelease --no-daemon
 
     - name: Upload APK Artifact
