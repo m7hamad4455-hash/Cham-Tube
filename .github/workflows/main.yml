@@ -14,38 +14,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. جلب ملفات المشروع من المستودع
+      # 1. جلب ملفات المشروع
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. إعداد بيئة جافا (Java 17)
+      # 2. إعداد جافا 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'zulu'
 
-      # 3. تثبيت أداة Gradle وإعداد بيئة العمل تلقائياً
+      # 3. تثبيت Gradle 8.7 مع إيقاف الكاش لضمان جلب مكاتب ياندكس الحديثة
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+          cache-disabled: true
 
-      # 4. خطوة سحرية لإنشاء ملف settings.gradle في المجلد الرئيسي إذا كان مفقوداً
-      - name: Ensure Root Project Settings
-        run: |
-          if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
-            echo "include ':app'" > settings.gradle
-          fi
-
-      # 5. إصلاح خطأ استبدال الملفات (تأكيد الاستبدال التلقائي الصامت لأي ملفات مضغوطة إن وُجدت)
+      # 4. فك الملفات المضغوطة بشكل آمن وتلقائي
       - name: Auto-Confirm File Extraction
         run: |
           if [ -f app.zip ]; then
             unzip -o app.zip || true
           fi
 
-      # 6. تنظيف وبناء الـ APK مع تطبيق حلول الاستقرار لمنع طلب أي مدخلات يدوية (حل Copilot المطور)
+      # 5. خطوة ذكية لحذف سطر ADRTLogCatReader تلقائياً من الكود قبل البناء لمنع الخطأ
+      - name: Auto-Remove AIDE Code
+        run: |
+          FILE_PATH="app/src/main/java/com/chamapps/chamtube/MainActivity.java"
+          if [ -f "$FILE_PATH" ]; then
+            sed -i '/ADRTLogCatReader.onContext/d' "$FILE_PATH"
+          fi
+
+      # 6. بناء التطبيق وضمان عدم وقوف السيرفر
       - name: Build Release APK
         run: |
           echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
@@ -53,11 +55,11 @@ jobs:
         env:
           CI: true
 
-      # 7. حفظ وحقن ملف الـ APK الناتج لتحميله من الموقع مباشرة
+      # 7. رفع ملف الـ APK الناتج للتحميل
       - name: Upload Build Artifact (APK)
         uses: actions/upload-artifact@v4
         with:
           name: ChamTube-Release-APK
           path: |
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/apk/release/*.apk
             **/build/outputs/apk/release/*.apk
