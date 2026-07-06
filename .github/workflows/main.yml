@@ -49,19 +49,17 @@ jobs:
             sed -i "s/mobileads:5.10.0/mobileads:6.4.1/g" "$BUILD_GRADLE_PATH"
           fi
 
-      # 6. المعالجة الذكية لحل الخطأ الأخير المتعلق بمسمى حجم البانر الثابت في الإصدار 6 واختصار معايير التوافق
+      # 6. المعالجة الذكية الشاملة لملفات الجافا لحل خطأ الحجم وتأكيد التوافق
       - name: Rewrite Java Codes for V6 Precision Match
         run: |
           BANNER_PATH="app/src/main/java/com/chamapps/chamtube/BannerAdManager.java"
           REWARD_PATH="app/src/main/java/com/chamapps/chamtube/RewardedAdManager.java"
           
-          # أ) إصلاح صيغة حجم البانر الأخيرة المتوافقة 100% مع الإصدار 6 وحذف الصيغ المرفوضة
+          # أ) استبدال أي صيغة حجم قديمة بالحجم الثابت الصريح والمدعوم كلياً في إصدار 6
           if [ -f "$BANNER_PATH" ]; then
-            sed -i 's/BannerAdSize.stickySize(this.activity, 320)/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.inlineSize(this.activity, 320)/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.stickySize(activity, 320)/BannerAdSize.banner_320x50(activity)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.inlineSize(activity, 320)/BannerAdSize.banner_320x50(activity)/g' "$BANNER_PATH"
-            sed -i 's/BannerAdSize.BANNER_320x50/BannerAdSize.banner_320x50(this.activity)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.stickySize([^)]*)/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.inlineSize([^)]*)/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
+            sed -i 's/BannerAdSize.BANNER_320x50/BannerAdSize.fixedSize(this.activity, 320, 50)/g' "$BANNER_PATH"
           fi
           
           # ب) تأكيد إصلاح حزمة وتسمية AdDisplayError وتحويلها إلى كائن الاستدعاء القديم المتوافق AdError
