@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        
+        // مستودع ياندكس الرسمي المخصص لتحميل مكتبة الإعلانات عبر السيرفر الأونلاين
+        maven { url "https://repo.yandex.ru/maven/" }
+    }
+}
+rootProject.name = "ChamTube"
+include ':app'
